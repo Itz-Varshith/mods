@@ -19,6 +19,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class UploadCommand {
+
+    private final AtomicBoolean isPickingFile = new AtomicBoolean(false);
+
     public void register(CommandDispatcher<FabricClientCommandSource> dispatcher, PlacementTask placementTask) {
         // Must use ClientCommandManager for UI/File stuff!
         dispatcher.register(ClientCommandManager.literal("upload")
@@ -30,6 +33,15 @@ public class UploadCommand {
     public  int execute(CommandContext<FabricClientCommandSource> context, PlacementTask task) {
 
         FabricClientCommandSource source = context.getSource();
+        if(task.isWorking()){
+            source.sendError(Component.literal("Wait for the other upload to complete!"));
+            return 1;
+        }
+
+        if(!isPickingFile.compareAndSet(false, true)){
+            source.sendError(Component.literal("You already have a file picker open!"));
+            return 1;
+        }
         source.sendFeedback(Component.literal("Opening file picker..."));
 
         // Run the file picker on a NEW thread so the game doesn't freeze!
@@ -61,10 +73,13 @@ public class UploadCommand {
                         source.sendError(Component.literal("Image not found/ invalid image data. Please try again."));
                     }else{
                         task.setData(taskResponse);
+                        source.sendFeedback(Component.literal("Imported image successfully, starting block mapping..."));
                     }
                 } else {
                     source.sendFeedback(Component.literal("Upload canceled."));
                 }
+            }finally {
+                isPickingFile.set(false);
             }
         });
 
